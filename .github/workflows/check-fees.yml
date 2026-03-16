@@ -1,0 +1,85 @@
+name: Check Passport Fees
+
+on:
+  schedule:
+    # Run every Monday at 8am UTC (3am Central)
+    - cron: "0 8 * * 1"
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  check-fees:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install fpdf2
+
+      - name: Run fee scraper
+        id: scraper
+        run: |
+          # Run scraper with --update flag so it auto-updates fees.json
+          python scraper.py --update 2>&1 | tee scraper_output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
+
+          # Save output for the email step
+          echo "scraper_output<<EOF" >> $GITHUB_OUTPUT
+          cat scraper_output.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          if [ $EXIT_CODE -eq 1 ]; then
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate updated PDF
+        if: steps.scraper.outputs.changes_detected == 'true'
+        run: python generate_pdf.py docs/Fee-Schedule.pdf
+
+      - name: Copy fees.json to docs for GitHub Pages
+        if: steps.scraper.outputs.changes_detected == 'true'
+        run: cp fees.json docs/fees.json
+
+      - name: Commit and push changes
+        if: steps.scraper.outputs.changes_detected == 'true'
+        run: |
+          git config user.name "Fee Update Bot"
+          git config user.email "fee-bot@users.noreply.github.com"
+          git add fees.json docs/fees.json docs/Fee-Schedule.pdf
+          git commit -m "Auto-update: passport fees changed $(date +%Y-%m-%d)"
+          git push
+
+      - name: Send email notification
+        if: steps.scraper.outputs.changes_detected == 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "Passport Fees Updated - ${{ github.event.repository.name }}"
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: ${{ secrets.SMTP_FROM }}
+          body: |
+            Passport fees have been automatically updated.
+
+            ${{ steps.scraper.outputs.scraper_output }}
+
+            Both websites will reflect the new fees automatically.
+            Updated PDF: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/Fee-Schedule.pdf
+
+            This is an automated message from the passport fee checker.
+
+      - name: No changes summary
+        if: steps.scraper.outputs.changes_detected == 'false'
+        run: echo "No fee changes detected. All current."

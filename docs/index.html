@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Passport Fee API</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 20px; }
+        h1 { margin-bottom: 8px; }
+        h2 { margin-top: 32px; margin-bottom: 12px; color: #4F81BD; }
+        h3 { margin-top: 20px; margin-bottom: 8px; }
+        p { margin-bottom: 12px; }
+        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 14px; }
+        pre { background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 6px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+        pre code { background: none; padding: 0; color: inherit; }
+        .subtitle { color: #666; margin-bottom: 24px; }
+        .endpoint { background: #f0f7ff; border: 1px solid #4F81BD; border-radius: 6px; padding: 12px 16px; margin: 12px 0; }
+        .endpoint code { background: none; font-weight: bold; font-size: 15px; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 12px; font-weight: bold; margin-left: 8px; }
+        .badge-get { background: #61affe; color: #fff; }
+        .demo-section { border: 2px solid #4F81BD; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        hr { border: none; border-top: 1px solid #ddd; margin: 32px 0; }
+        a { color: #4F81BD; }
+    </style>
+</head>
+<body>
+
+<h1>Passport Fee API</h1>
+<p class="subtitle">Free, open, auto-updated passport and USPS shipping fees for U.S. passport acceptance facilities.</p>
+
+<p>This API provides current U.S. passport application fees, USPS shipping rates, and delivery timeframes.
+   Data is scraped weekly from official sources (U.S. Department of State and USPS) and updated automatically.</p>
+
+<h2>API Endpoints</h2>
+
+<div class="endpoint">
+    <span class="badge badge-get">GET</span>
+    <code>fees.json</code> &mdash; All fees, delivery times, and metadata
+</div>
+
+<div class="endpoint">
+    <span class="badge badge-get">GET</span>
+    <code>Fee-Schedule.pdf</code> &mdash; Auto-generated PDF fee schedule
+</div>
+
+<h2>Quick Start</h2>
+
+<h3>Embed the fee table on your website</h3>
+<p>Add this to any HTML page to display a live, auto-updating fee table:</p>
+<pre><code>&lt;div id="passport-fees" data-show-pdf="true" data-show-updated="true"&gt;&lt;/div&gt;
+&lt;script src="passport-fees.js"&gt;&lt;/script&gt;</code></pre>
+
+<h3>Fetch fees via JavaScript</h3>
+<pre><code>fetch('fees.json')
+  .then(r => r.json())
+  .then(data => {
+    console.log('Adult passport book:', data.fees.application.items.adult_book.amount);
+    console.log('Priority Mail Express:', data.fees.shipping.items.priority_express.amount);
+  });</code></pre>
+
+<h3>Fetch fees via command line</h3>
+<pre><code>curl -s fees.json | python -m json.tool</code></pre>
+
+<h2>Data Sources</h2>
+<ul style="margin: 12px 0 12px 24px;">
+    <li><strong>Application fees</strong> &mdash; <a href="https://travel.state.gov/content/travel/en/passports/how-apply/fees.html">U.S. Department of State</a></li>
+    <li><strong>USPS shipping rates</strong> &mdash; <a href="https://www.usps.com/business/prices.htm">USPS Business Prices</a></li>
+    <li><strong>Delivery timeframes</strong> &mdash; <a href="https://www.usps.com/ship/priority-mail-express.htm">USPS Priority Mail Express</a> / <a href="https://www.usps.com/ship/priority-mail.htm">Priority Mail</a></li>
+</ul>
+
+<hr>
+
+<h2>Live Demo</h2>
+<div class="demo-section">
+    <div id="passport-fees" data-show-pdf="true" data-show-updated="true"></div>
+    <script src="passport-fees.js"></script>
+</div>
+
+<hr>
+<p style="font-size: 13px; color: #888;">
+    Updated automatically via GitHub Actions. Not affiliated with USPS or the U.S. Department of State.
+</p>
+
+</body>
+</html>
