@@ -150,9 +150,9 @@
       fee: formatAmount(ship.priority_express.amount),
     });
     addlRows.push({
-      label: (ship.priority_1_3_day.delivery_time || "1-3 Days") + " Return Services",
+      label: (ship.return_delivery.delivery_time || "1-3 Days") + " Return Services",
       note: "US Postal Priority Mail Overnight up to " + expressTime + " Guarantee service. (USPS Express Mail\u00ae Service)",
-      fee: formatAmount(ship.priority_1_3_day.amount),
+      fee: formatAmount(ship.return_delivery.amount),
     });
     addlRows.push({
       label: "Expedite Fee",

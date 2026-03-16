@@ -283,10 +283,10 @@ def generate_passport_pdf(fees_data: dict, output_path: Path = None):
         "*USPS rates may change*",
     )
     pdf.add_fee_row(
-        f"{ship['priority_1_3_day'].get('delivery_time', '1-3 Days')} Return "
+        f"{ship['return_delivery'].get('delivery_time', '1-3 Days')} Return "
         f"Services US Postal Priority Mail Overnight up to {express_delivery} "
         f"Guarantee service.",
-        f"${ship['priority_1_3_day']['amount']:.2f}",
+        f"${ship['return_delivery']['amount']:.2f}",
         "(USPS Express Mail\u00ae Service)",
     )
     pdf.add_fee_row(

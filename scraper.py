@@ -110,7 +110,7 @@ def scrape_state_dept_fees() -> dict:
         "expedite": [
             r"expedit.*?\$(\d+)",
         ],
-        "priority_1_3_day": [
+        "return_delivery": [
             r"1-3\s*day.*?\$(\d+\.?\d*)",
             r"delivery.*?\$(\d+\.?\d*)",
         ],
@@ -135,7 +135,7 @@ def scrape_state_dept_fees() -> dict:
         115.0: "child_book_card",
         35.0: "execution_fee",
         60.0: "expedite",
-        22.05: "priority_1_3_day",
+        22.05: "return_delivery",
         150.0: "file_search",  # not in our fee schedule but on the page
     }
 
@@ -222,7 +222,7 @@ def scrape_delivery_times() -> dict:
         text_lower = text.lower()
         match = re.search(r'(\d+-\d+)\s*day\s*delivery', text_lower)
         if match:
-            times["state_dept_1_3_day"] = f"{match.group(1)} Days"
+            times["state_dept_return_delivery"] = f"{match.group(1)} Days"
     except Exception as e:
         print(f"  ERROR scraping State Dept delivery times: {e}")
 
@@ -418,7 +418,7 @@ def check_fees(update: bool = False, verbose: bool = True) -> list[dict]:
                 # Also update delivery_time in shipping items if applicable
                 shipping_map = {
                     "usps_priority_express": "priority_express",
-                    "state_dept_1_3_day": "priority_1_3_day",
+                    "state_dept_return_delivery": "return_delivery",
                 }
                 if key in shipping_map:
                     item_key = shipping_map[key]

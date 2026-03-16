@@ -23,12 +23,12 @@
  *
  * Shipping Fees:
  *   <span data-fee="shipping.priority_express"></span>         → $33.25
- *   <span data-fee="shipping.priority_1_3_day"></span>         → $22.05
+ *   <span data-fee="shipping.return_delivery"></span>         → $22.05
  *   <span data-fee="shipping.expedite"></span>                 → $60.00
  *
  * Delivery Times:
  *   <span data-fee="shipping.priority_express.delivery_time"></span>   → 1-2 Days
- *   <span data-fee="shipping.priority_1_3_day.delivery_time"></span>   → 1-3 Days
+ *   <span data-fee="shipping.return_delivery.delivery_time"></span>   → 1-3 Days
  */
 (function () {
   "use strict";

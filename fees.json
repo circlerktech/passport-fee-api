@@ -57,7 +57,7 @@
           "delivery_time": "1-2 Days",
           "source": "usps"
         },
-        "priority_1_3_day": {
+        "return_delivery": {
           "label": "1-3 Day Delivery",
           "amount": 22.05,
           "delivery_time": "1-3 Days",
@@ -82,7 +82,7 @@
       "timeframe": "2-3 Days",
       "source": "https://www.usps.com/business/prices.htm"
     },
-    "state_dept_1_3_day": {
+    "state_dept_return_delivery": {
       "label": "State Department 1-3 Day Delivery",
       "timeframe": "1-3 Days",
       "source": "https://travel.state.gov/content/travel/en/passports/how-apply/fees.html"
