@@ -62,6 +62,43 @@
 <h3>Fetch fees via command line</h3>
 <pre><code>curl -s fees.json | python -m json.tool</code></pre>
 
+<h2>Inline Fee Replacement (Recommended)</h2>
+<p>Use <code>passport-fees-inline.js</code> to inject live fee values into your existing page.
+   Add <code>data-fee</code> attributes to any element where a fee should appear:</p>
+
+<h3>1. Add the script to your page</h3>
+<pre><code>&lt;script src="https://circlerktech.github.io/passport-fee-api/passport-fees-inline.js"&gt;&lt;/script&gt;</code></pre>
+
+<h3>2. Use these span codes wherever a fee should appear</h3>
+
+<h3>Application Fees</h3>
+<pre><code>&lt;span data-fee="application.adult_book"&gt;&lt;/span&gt;          Adult Passport Book
+&lt;span data-fee="application.child_book"&gt;&lt;/span&gt;          Child Passport Book
+&lt;span data-fee="application.adult_card"&gt;&lt;/span&gt;          Adult Passport Card
+&lt;span data-fee="application.child_card"&gt;&lt;/span&gt;          Child Passport Card
+&lt;span data-fee="application.adult_book_card"&gt;&lt;/span&gt;     Adult Book + Card
+&lt;span data-fee="application.child_book_card"&gt;&lt;/span&gt;     Child Book + Card</code></pre>
+
+<h3>Execution &amp; Photo Fees</h3>
+<pre><code>&lt;span data-fee="execution.execution_fee"&gt;&lt;/span&gt;        Execution Fee
+&lt;span data-fee="execution.photo"&gt;&lt;/span&gt;                 Passport Photo</code></pre>
+
+<h3>Shipping Fees</h3>
+<pre><code>&lt;span data-fee="shipping.priority_express"&gt;&lt;/span&gt;      Priority Mail Express
+&lt;span data-fee="shipping.priority_1_3_day"&gt;&lt;/span&gt;      Priority Mail (1-3 Day)
+&lt;span data-fee="shipping.expedite"&gt;&lt;/span&gt;              Expedite Fee</code></pre>
+
+<h3>Delivery Times</h3>
+<pre><code>&lt;span data-fee="shipping.priority_express.delivery_time"&gt;&lt;/span&gt;   "1-2 Days"
+&lt;span data-fee="shipping.priority_1_3_day.delivery_time"&gt;&lt;/span&gt;   "1-3 Days"</code></pre>
+
+<h3>Example</h3>
+<pre><code>Priority Mail Express: &lt;span data-fee="shipping.priority_express"&gt;&lt;/span&gt;
+(&lt;span data-fee="shipping.priority_express.delivery_time"&gt;&lt;/span&gt; delivery)</code></pre>
+<p>Renders as: Priority Mail Express: <strong>$33.25</strong> (<strong>1-2 Days</strong> delivery)</p>
+
+<hr>
+
 <h2>Data Sources</h2>
 <ul style="margin: 12px 0 12px 24px;">
     <li><strong>Application fees</strong> &mdash; <a href="https://travel.state.gov/content/travel/en/passports/how-apply/fees.html">U.S. Department of State</a></li>
