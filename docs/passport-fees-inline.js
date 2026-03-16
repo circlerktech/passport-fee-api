@@ -3,27 +3,32 @@
  * Fills in fee values into existing HTML elements using data attributes.
  * Works with any table builder (WordPress, hand-coded, etc.)
  *
- * Usage: Add data-fee attributes to any element where a fee should appear:
+ * Usage: Add data-fee attributes to any element where a fee should appear.
+ * Then include this script on the page:
+ *   <script src="https://circlerktech.github.io/passport-fee-api/passport-fees-inline.js"></script>
  *
- *   <span data-fee="application.adult_book"></span>         → "$130.00"
- *   <span data-fee="shipping.priority_express"></span>      → "$33.25"
- *   <span data-fee="execution.execution_fee"></span>        → "$35.00"
- *   <span data-fee="shipping.priority_express.delivery_time"></span> → "1-2 Days"
+ * All available spans (copy-paste ready):
  *
- * Available fee keys:
- *   application.adult_book        application.child_book
- *   application.adult_card        application.child_card
- *   application.adult_book_card   application.child_book_card
- *   execution.execution_fee       execution.photo
- *   shipping.priority_express     shipping.priority_1_3_day
- *   shipping.expedite
+ * Application Fees:
+ *   <span data-fee="application.adult_book"></span>            → $130.00
+ *   <span data-fee="application.child_book"></span>            → $100.00
+ *   <span data-fee="application.adult_card"></span>            → $30.00
+ *   <span data-fee="application.child_card"></span>            → $15.00
+ *   <span data-fee="application.adult_book_card"></span>       → $160.00
+ *   <span data-fee="application.child_book_card"></span>       → $115.00
  *
- * For delivery times, append .delivery_time:
- *   shipping.priority_express.delivery_time
- *   shipping.priority_1_3_day.delivery_time
+ * Execution & Photo Fees:
+ *   <span data-fee="execution.execution_fee"></span>           → $35.00
+ *   <span data-fee="execution.photo"></span>                   → $10.00
  *
- * Then include this script anywhere on the page:
- *   <script src="https://<your-gh-pages>/passport-fees-inline.js"></script>
+ * Shipping Fees:
+ *   <span data-fee="shipping.priority_express"></span>         → $33.25
+ *   <span data-fee="shipping.priority_1_3_day"></span>         → $22.05
+ *   <span data-fee="shipping.expedite"></span>                 → $60.00
+ *
+ * Delivery Times:
+ *   <span data-fee="shipping.priority_express.delivery_time"></span>   → 1-2 Days
+ *   <span data-fee="shipping.priority_1_3_day.delivery_time"></span>   → 1-3 Days
  */
 (function () {
   "use strict";
