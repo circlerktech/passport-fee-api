@@ -2,8 +2,8 @@ name: Check Passport Fees
 
 on:
   schedule:
-    # Run daily at 8am UTC (3am Central)
-    - cron: "0 8 * * *"
+    # Run daily at 6pm UTC (1pm CDT)
+    - cron: "0 18 * * *"
   workflow_dispatch: # Allow manual trigger from GitHub UI
 
 jobs:
