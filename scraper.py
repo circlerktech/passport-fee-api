@@ -83,49 +83,56 @@ def scrape_state_dept_fees() -> dict:
     """Scrape passport fees from the State Department website."""
     text = fetch_page(STATE_DEPT_URL)
     amounts = find_dollar_amounts(text)
+    text_lower = text.lower()
 
     fees = {}
 
-    # Look for known fee patterns
-    patterns = {
+    # Strategy 1: Look for fee amounts near specific product labels
+    # Use tight patterns that match "Passport Book" → next dollar amount
+    # but NOT "Passport Book & Card" (which is a different product)
+    row_patterns = {
         "adult_book": [
-            r"(?:adult|age 16|16 and older).*?book.*?\$(\d+)",
-            r"book.*?(?:adult|16).*?\$(\d+)",
+            # "Passport Book" followed by a dollar amount, but not "& Card" in between
+            r'passport\s+book(?!\s*(?:&|and)\s*card).*?\$(\d+\.?\d*)',
         ],
         "child_book": [
-            r"(?:child|under 16|minor).*?book.*?\$(\d+)",
-            r"book.*?(?:child|under 16|minor).*?\$(\d+)",
+            r'child\s+passport\s+book(?!\s*(?:&|and)\s*card).*?\$(\d+\.?\d*)',
         ],
         "adult_card": [
-            r"(?:adult|age 16|16 and older).*?card.*?\$(\d+)",
-            r"card.*?(?:adult|16).*?\$(\d+)",
+            # "Passport Card" followed by a dollar amount
+            r'passport\s+card(?!\s*(?:&|and)).*?\$(\d+\.?\d*)',
         ],
         "child_card": [
-            r"(?:child|under 16|minor).*?card.*?\$(\d+)",
-            r"card.*?(?:child|under 16|minor).*?\$(\d+)",
+            r'child\s+passport\s+card(?!\s*(?:&|and)).*?\$(\d+\.?\d*)',
+        ],
+        "adult_book_card": [
+            r'passport\s+book\s*(?:&|and)\s*card.*?\$(\d+\.?\d*)',
+        ],
+        "child_book_card": [
+            r'child\s+passport\s+book\s*(?:&|and)\s*card.*?\$(\d+\.?\d*)',
         ],
         "execution_fee": [
-            r"(?:acceptance|execution).*?\$(\d+)",
+            r'(?:acceptance|execution)\s+fee.*?\$(\d+\.?\d*)',
+            r'\$(\d+\.?\d*)\s+acceptance\s+fee',
         ],
         "expedite": [
-            r"expedit.*?\$(\d+)",
+            r'expedit\w*.*?\$(\d+\.?\d*)',
         ],
         "return_delivery": [
-            r"1-3\s*day.*?\$(\d+\.?\d*)",
-            r"delivery.*?\$(\d+\.?\d*)",
+            r'1-3\s*day\s+delivery.*?\$(\d+\.?\d*)',
+            r'add\s+1-3\s*day.*?\$(\d+\.?\d*)',
         ],
     }
 
-    text_lower = text.lower()
-
-    for fee_key, pattern_list in patterns.items():
+    for fee_key, pattern_list in row_patterns.items():
         for pattern in pattern_list:
             match = re.search(pattern, text_lower)
             if match:
                 fees[fee_key] = float(match.group(1))
                 break
 
-    # Also try matching against known amounts for validation
+    # Strategy 2: Validate/fill gaps using known amounts found on the page
+    # This catches fees the regex missed by recognizing known government-set amounts
     known_state_amounts = {
         130.0: "adult_book",
         100.0: "child_book",
@@ -156,29 +163,28 @@ def scrape_usps_fees() -> dict:
 
     fees = {}
 
-    # The prices page has a clean layout:
-    #   "Priority Mail Express" section with "Flat Rate Envelope" → "$33.25" at Post Office
-    # We look for "flat rate envelope" near "post office" in the Express section
-
-    # Find the Priority Mail Express section and extract flat rate envelope price
-    # Pattern: "flat rate envelope" ... "$XX.XX" ... "post office"
-    # or: "flat rate envelope" ... "post office" ... "$XX.XX"
+    # Look for the Priority Mail Express Flat Rate Envelope price at the Post Office.
+    # The page has "Prices start at $33.00" (generic) AND the specific
+    # "Flat Rate Envelope ... $33.25 at the Post Office" (what we want).
+    # We need the specific flat rate envelope price, not the generic "starts at" price.
+    # Match: "Flat Rate Envelope" (not Legal/Padded) near a price and "Post Office"
     express_match = re.search(
-        r'priority\s*mail\s*express.*?flat\s*rate\s*envelope.*?\$(\d+\.?\d*)\s*.*?post\s*office',
+        r'(?:priority\s*mail\s*express\s+)?flat\s+rate\s+envelope'
+        r'(?!\s*\()' # not followed by dimensions (to avoid matching in wrong context)
+        r'[^$]*?\$(\d+\.\d{2})\s*(?:at\s+(?:the\s+)?)?post\s+office',
         text_lower
     )
     if express_match:
         fees["priority_express"] = float(express_match.group(1))
 
-    # Fallback: look for amounts with context containing both envelope and post office
+    # Fallback: scan dollar amounts for one near a flat rate envelope + post office context
     if "priority_express" not in fees:
         for context, amount in amounts:
             ctx_lower = context.lower()
-            if ("envelope" in ctx_lower or "post off" in ctx_lower) and 30.0 < amount < 40.0:
+            if "flat rate envelope" in ctx_lower and "post off" in ctx_lower:
                 if "legal" not in ctx_lower and "padded" not in ctx_lower:
-                    if "priority" not in ctx_lower or "express" in ctx_lower:
-                        fees["priority_express"] = amount
-                        break
+                    fees["priority_express"] = amount
+                    break
 
     return fees
 
