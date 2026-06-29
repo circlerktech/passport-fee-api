@@ -3,7 +3,9 @@
   "last_checked": "2026-04-27",
   "sources": {
     "state_department": "https://travel.state.gov/content/travel/en/passports/how-apply/fees.html",
-    "usps_prices": "https://www.usps.com/business/prices.htm"
+    "usps_prices": "https://www.usps.com/business/prices.htm",
+    "usps_express": "https://www.usps.com/ship/priority-mail-express.htm",
+    "usps_priority": "https://www.usps.com/ship/priority-mail.htm"
   },
   "fees": {
     "application": {

@@ -36,11 +36,11 @@ jobs:
           cat scraper_output.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-          if [ $EXIT_CODE -eq 1 ]; then
-            echo "changes_detected=true" >> $GITHUB_OUTPUT
-          else
-            echo "changes_detected=false" >> $GITHUB_OUTPUT
-          fi
+          # Exit codes: 0 = no changes, 1 = real fee/time change or a source
+          # URL redirect (both auto-applied to fees.json, commit-worthy),
+          # 2 = scraper missed an expected fee (needs manual attention)
+          echo "changes_detected=$([ $EXIT_CODE -eq 1 ] && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "needs_attention=$([ $EXIT_CODE -eq 2 ] && echo true || echo false)" >> $GITHUB_OUTPUT
 
       - name: Generate updated PDF
         if: steps.scraper.outputs.changes_detected == 'true'
@@ -71,7 +71,7 @@ jobs:
           to: ${{ secrets.NOTIFY_EMAIL }}
           from: ${{ secrets.SMTP_FROM }}
           body: |
-            Passport fees have been automatically updated.
+            Passport fees and/or a source URL have been automatically updated.
 
             ${{ steps.scraper.outputs.scraper_output }}
 
@@ -80,6 +80,27 @@ jobs:
 
             This is an automated message from the passport fee checker.
 
+      - name: Send scraper-needs-attention alert
+        if: steps.scraper.outputs.needs_attention == 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "ACTION NEEDED: Passport fee scraper needs attention - ${{ github.event.repository.name }}"
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: ${{ secrets.SMTP_FROM }}
+          body: |
+            The scraper ran but could not find one or more expected fees on
+            the source site. This usually means the page's wording or layout
+            changed and a scraper pattern needs to be updated. Nothing was
+            changed automatically — fees.json is untouched.
+
+            ${{ steps.scraper.outputs.scraper_output }}
+
+            This is an automated message from the passport fee checker.
+
       - name: No changes summary
-        if: steps.scraper.outputs.changes_detected == 'false'
+        if: steps.scraper.outputs.changes_detected == 'false' && steps.scraper.outputs.needs_attention == 'false'
         run: echo "No fee changes detected. All current."

@@ -18,11 +18,25 @@ from pathlib import Path
 
 FEES_FILE = Path(__file__).parent / "fees.json"
 
-STATE_DEPT_URL = "https://travel.state.gov/content/travel/en/passports/how-apply/fees.html"
-USPS_PRICES_URL = "https://www.usps.com/business/prices.htm"
-# Individual service pages used only for delivery timeframes
-USPS_EXPRESS_URL = "https://www.usps.com/ship/priority-mail-express.htm"
-USPS_PRIORITY_URL = "https://www.usps.com/ship/priority-mail.htm"
+# Fallback defaults, only used if fees.json["sources"] is missing a key
+# (e.g. an older fees.json). The live URLs are normally read from there —
+# see check_fees() — so a detected redirect can update fees.json directly
+# instead of requiring someone to hand-edit a constant in this file.
+DEFAULT_STATE_DEPT_URL = "https://travel.state.gov/content/travel/en/passports/how-apply/fees.html"
+DEFAULT_USPS_PRICES_URL = "https://www.usps.com/business/prices.htm"
+DEFAULT_USPS_EXPRESS_URL = "https://www.usps.com/ship/priority-mail-express.htm"
+DEFAULT_USPS_PRIORITY_URL = "https://www.usps.com/ship/priority-mail.htm"
+
+# Fee keys each scraper is expected to find on every successful run. If one
+# goes missing, the source page's wording/layout likely changed and the
+# scraper needs a fix — better to surface that loudly than silently keep
+# stale data in fees.json (see return_delivery: this happened once already).
+EXPECTED_STATE_DEPT_FEES = {
+    "adult_book", "child_book", "adult_card", "child_card",
+    "adult_book_card", "child_book_card", "execution_fee",
+    "expedite", "return_delivery",
+}
+EXPECTED_USPS_FEES = {"priority_express"}
 
 
 class TextExtractor(HTMLParser):
@@ -49,17 +63,53 @@ class TextExtractor(HTMLParser):
         return " ".join(self.text_parts)
 
 
-def fetch_page(url: str) -> str:
-    """Fetch a web page and return its text content."""
+# Populated by fetch_page() whenever a requested URL redirects somewhere
+# else. A page redirecting today doesn't mean it will forever — surfacing
+# this lets fees.json["sources"] get updated to the live URL before the old
+# one ever 404s, instead of relying on the redirect indefinitely.
+_redirect_notices: list[dict] = []
+
+
+def fetch_page(url: str, source_key: str | None = None) -> str:
+    """
+    Fetch a web page and return its text content.
+
+    `source_key` should match a key in fees.json["sources"] (e.g.
+    "state_department") so a detected redirect can be traced back to the
+    right field to update there.
+    """
     req = urllib.request.Request(url, headers={
         "User-Agent": "Mozilla/5.0 (compatible; PassportFeeChecker/1.0)"
     })
     with urllib.request.urlopen(req, timeout=30) as resp:
         html = resp.read().decode("utf-8", errors="replace")
+        final_url = resp.geturl()
+
+    if final_url and final_url != url:
+        _redirect_notices.append({
+            "old_url": url, "new_url": final_url, "source_key": source_key,
+        })
 
     parser = TextExtractor()
     parser.feed(html)
     return parser.get_text()
+
+
+def find_amount_near_keywords(
+    amounts: list[tuple[str, float]], keywords: list[str]
+) -> float | None:
+    """
+    Return the first dollar amount whose surrounding context contains every
+    keyword in `keywords` (case-insensitive), regardless of the order they
+    appear in. This is more resilient to sentence rewording than a fixed-order
+    regex — e.g. it still matches if "1-3 day delivery: $X" gets reworded to
+    "in 1-3 days after we mail it, add $X".
+    """
+    for context, amount in amounts:
+        ctx_lower = context.lower()
+        if all(kw in ctx_lower for kw in keywords):
+            return amount
+    return None
 
 
 def find_dollar_amounts(text: str) -> list[tuple[str, float]]:
@@ -79,9 +129,9 @@ def find_dollar_amounts(text: str) -> list[tuple[str, float]]:
     return results
 
 
-def scrape_state_dept_fees() -> dict:
+def scrape_state_dept_fees(url: str = DEFAULT_STATE_DEPT_URL) -> dict:
     """Scrape passport fees from the State Department website."""
-    text = fetch_page(STATE_DEPT_URL)
+    text = fetch_page(url, source_key="state_department")
     amounts = find_dollar_amounts(text)
     text_lower = text.lower()
 
@@ -111,16 +161,8 @@ def scrape_state_dept_fees() -> dict:
         "child_book_card": [
             r'child\s+passport\s+book\s*(?:&|and)\s*card.*?\$(\d+\.?\d*)',
         ],
-        "execution_fee": [
-            r'(?:acceptance|execution)\s+fee.*?\$(\d+\.?\d*)',
-            r'\$(\d+\.?\d*)\s+acceptance\s+fee',
-        ],
         "expedite": [
             r'expedit\w*.*?\$(\d+\.?\d*)',
-        ],
-        "return_delivery": [
-            r'1-3\s*day\s+delivery.*?\$(\d+\.?\d*)',
-            r'add\s+1-3\s*day.*?\$(\d+\.?\d*)',
         ],
     }
 
@@ -131,8 +173,26 @@ def scrape_state_dept_fees() -> dict:
                 fees[fee_key] = float(match.group(1))
                 break
 
-    # Strategy 2: Validate/fill gaps using known amounts found on the page
-    # This catches fees the regex missed by recognizing known government-set amounts
+    # Strategy 1b: Keyword-anchored matches for fees whose sentence wording
+    # tends to get reworded by the State Dept (it already broke once — see
+    # return_delivery). Instead of requiring an exact phrase order, just
+    # require all keywords to appear near the same dollar amount.
+    keyword_anchors = {
+        "execution_fee": ["acceptance", "fee"],
+        "return_delivery": ["1-3", "day"],
+    }
+    for fee_key, keywords in keyword_anchors.items():
+        if fee_key not in fees:
+            amount = find_amount_near_keywords(amounts, keywords)
+            if amount is not None:
+                fees[fee_key] = amount
+
+    # Strategy 2: Validate/fill gaps using known amounts found on the page.
+    # Deliberately excludes execution_fee/return_delivery — hardcoding their
+    # current value here would silently mask future changes to those exact
+    # fees instead of surfacing a real miss (which is what happened when the
+    # $22.05 return delivery fee became $23.36 and the old regex stopped
+    # matching: this fallback kept "validating" the stale $22.05 forever).
     known_state_amounts = {
         130.0: "adult_book",
         100.0: "child_book",
@@ -140,9 +200,7 @@ def scrape_state_dept_fees() -> dict:
         15.0: "child_card",
         160.0: "adult_book_card",
         115.0: "child_book_card",
-        35.0: "execution_fee",
         60.0: "expedite",
-        22.05: "return_delivery",
         150.0: "file_search",  # not in our fee schedule but on the page
     }
 
@@ -155,9 +213,9 @@ def scrape_state_dept_fees() -> dict:
     return fees
 
 
-def scrape_usps_fees() -> dict:
+def scrape_usps_fees(url: str = DEFAULT_USPS_PRICES_URL) -> dict:
     """Scrape USPS pricing from the consolidated prices page."""
-    text = fetch_page(USPS_PRICES_URL)
+    text = fetch_page(url, source_key="usps_prices")
     text_lower = text.lower()
     amounts = find_dollar_amounts(text)
 
@@ -189,13 +247,17 @@ def scrape_usps_fees() -> dict:
     return fees
 
 
-def scrape_delivery_times() -> dict:
+def scrape_delivery_times(
+    usps_express_url: str = DEFAULT_USPS_EXPRESS_URL,
+    usps_priority_url: str = DEFAULT_USPS_PRIORITY_URL,
+    state_dept_url: str = DEFAULT_STATE_DEPT_URL,
+) -> dict:
     """Scrape delivery timeframes from USPS service pages and State Dept."""
     times = {}
 
     # USPS Priority Mail Express delivery time (from the service page, not prices)
     try:
-        text = fetch_page(USPS_EXPRESS_URL)
+        text = fetch_page(usps_express_url, source_key="usps_express")
         text_lower = text.lower()
         for pattern in [
             r'(?:deliver|arrival|arrives?|guaranteed).*?(\d+-\d+)\s*(?:business\s+)?day',
@@ -214,7 +276,7 @@ def scrape_delivery_times() -> dict:
 
     # USPS Priority Mail delivery time (from the service page)
     try:
-        text = fetch_page(USPS_PRIORITY_URL)
+        text = fetch_page(usps_priority_url, source_key="usps_priority")
         text_lower = text.lower()
         match = re.search(r'(\d+-\d+)\s*(?:business\s+)?day', text_lower)
         if match:
@@ -222,11 +284,17 @@ def scrape_delivery_times() -> dict:
     except Exception as e:
         print(f"  ERROR scraping USPS Priority Mail delivery times: {e}")
 
-    # State Department 1-3 day delivery time (from fees page)
+    # State Department return-delivery timeframe (from fees page). Try the
+    # current wording first, fall back to the older phrasing in case it
+    # reverts — deliberately no hardcoded "1-3 Days" fallback beyond that,
+    # since that would mask a real future change the same way the $22.05
+    # return_delivery fee silently went stale.
     try:
-        text = fetch_page(STATE_DEPT_URL)
+        text = fetch_page(state_dept_url, source_key="state_department")
         text_lower = text.lower()
-        match = re.search(r'(\d+-\d+)\s*day\s*delivery', text_lower)
+        match = re.search(r'(\d+-\d+)\s*days?\s+after\s+we\s+mail\s+it', text_lower)
+        if not match:
+            match = re.search(r'(\d+-\d+)\s*day\s*delivery', text_lower)
         if match:
             times["state_dept_return_delivery"] = f"{match.group(1)} Days"
     except Exception as e:
@@ -267,6 +335,20 @@ def save_fees(data: dict):
         json.dump(data, f, indent=2)
 
 
+def detect_missing_fees(scraped: dict, expected: set, source: str) -> list[dict]:
+    """
+    Flag any fee key we expect a scraper to find but didn't. A miss almost
+    always means the source page's wording or layout changed and a pattern
+    needs updating — silently doing nothing here is how the return_delivery
+    fee went stale for weeks undetected.
+    """
+    missing = expected - scraped.keys()
+    return [
+        {"type": "missing_fee", "source": source, "key": key}
+        for key in sorted(missing)
+    ]
+
+
 def compare_fees(current: dict, scraped: dict) -> list[dict]:
     """
     Compare scraped fees against current known fees.
@@ -301,8 +383,13 @@ def format_change_report(changes: list[dict]) -> str:
         "",
     ]
 
-    fee_changes = [c for c in changes if c.get("type") != "delivery_time"]
+    fee_changes = [
+        c for c in changes
+        if c.get("type") not in ("delivery_time", "missing_fee", "url_redirect")
+    ]
     time_changes = [c for c in changes if c.get("type") == "delivery_time"]
+    missing_changes = [c for c in changes if c.get("type") == "missing_fee"]
+    redirect_changes = [c for c in changes if c.get("type") == "url_redirect"]
 
     if fee_changes:
         lines.append("FEE CHANGES:")
@@ -320,6 +407,25 @@ def format_change_report(changes: list[dict]) -> str:
                 f"  {change['label']}:"
                 f"  {change['old_value']} -> {change['new_value']}"
             )
+        lines.append("")
+
+    if missing_changes:
+        lines.append("SCRAPER COULD NOT FIND (page wording/layout may have changed):")
+        for change in missing_changes:
+            lines.append(f"  [{change['source']}] {change['key']}")
+        lines.append("")
+        lines.append(
+            "These fees were NOT updated automatically — check the source page "
+            "manually and fix the scraper pattern."
+        )
+        lines.append("")
+
+    if redirect_changes:
+        lines.append("SOURCE URL REDIRECTED (fees.json[\"sources\"] updated automatically):")
+        for change in redirect_changes:
+            lines.append(f"  {change['old_url']}")
+            lines.append(f"    -> {change['new_url']}")
+        lines.append("")
         lines.append("")
 
     lines.append("Action required: Update fees.json and both WordPress sites.")
@@ -364,12 +470,19 @@ def check_fees(update: bool = False, verbose: bool = True) -> list[dict]:
         List of changes detected
     """
     current_data = load_current_fees()
+    _redirect_notices.clear()
+
+    sources = current_data.get("sources", {})
+    state_dept_url = sources.get("state_department", DEFAULT_STATE_DEPT_URL)
+    usps_prices_url = sources.get("usps_prices", DEFAULT_USPS_PRICES_URL)
+    usps_express_url = sources.get("usps_express", DEFAULT_USPS_EXPRESS_URL)
+    usps_priority_url = sources.get("usps_priority", DEFAULT_USPS_PRIORITY_URL)
 
     if verbose:
         print("Checking State Department fees...")
     state_fees = {}
     try:
-        state_fees = scrape_state_dept_fees()
+        state_fees = scrape_state_dept_fees(state_dept_url)
         if verbose:
             print(f"  Found {len(state_fees)} fee(s) from State Department")
     except Exception as e:
@@ -379,7 +492,7 @@ def check_fees(update: bool = False, verbose: bool = True) -> list[dict]:
         print("Checking USPS fees...")
     usps_fees = {}
     try:
-        usps_fees = scrape_usps_fees()
+        usps_fees = scrape_usps_fees(usps_prices_url)
         if verbose:
             print(f"  Found {len(usps_fees)} fee(s) from USPS")
     except Exception as e:
@@ -389,7 +502,7 @@ def check_fees(update: bool = False, verbose: bool = True) -> list[dict]:
         print("Checking delivery timeframes...")
     delivery_times = {}
     try:
-        delivery_times = scrape_delivery_times()
+        delivery_times = scrape_delivery_times(usps_express_url, usps_priority_url, state_dept_url)
         if verbose:
             print(f"  Found {len(delivery_times)} delivery timeframe(s)")
     except Exception as e:
@@ -409,14 +522,36 @@ def check_fees(update: bool = False, verbose: bool = True) -> list[dict]:
     # Compare fees and delivery times
     fee_changes = compare_fees(current_data, all_scraped)
     time_changes = compare_delivery_times(current_data, delivery_times)
-    changes = fee_changes + time_changes
+    missing_changes = (
+        detect_missing_fees(state_fees, EXPECTED_STATE_DEPT_FEES, "State Department")
+        + detect_missing_fees(usps_fees, EXPECTED_USPS_FEES, "USPS")
+    )
+
+    # A URL redirecting today doesn't mean it always will — update
+    # fees.json["sources"] to the live URL before the old one ever stops
+    # working. Dedupe since the same URL can be fetched twice in one run
+    # (e.g. the State Dept URL is used for both fees and timeframes), and
+    # skip any redirect we can't trace back to a known sources key.
+    seen_redirects = set()
+    redirect_changes = []
+    for notice in _redirect_notices:
+        if notice["old_url"] in seen_redirects or not notice.get("source_key"):
+            continue
+        seen_redirects.add(notice["old_url"])
+        redirect_changes.append({"type": "url_redirect", **notice})
+
+    changes = fee_changes + time_changes + missing_changes + redirect_changes
 
     if verbose:
         print(f"\n{format_change_report(changes)}")
 
-    if changes and update:
+    # url_redirect changes are safe to auto-apply (they update fees.json
+    # data, not code) so they count as real, commit-worthy changes.
+    real_changes = fee_changes + time_changes + redirect_changes
+
+    if real_changes and update:
         # Update fees.json with new values
-        for change in changes:
+        for change in real_changes:
             if change.get("type") == "delivery_time":
                 key = change["key"]
                 if key in current_data.get("delivery_times", {}):
@@ -430,17 +565,21 @@ def check_fees(update: bool = False, verbose: bool = True) -> list[dict]:
                     item_key = shipping_map[key]
                     if item_key in current_data["fees"]["shipping"]["items"]:
                         current_data["fees"]["shipping"]["items"][item_key]["delivery_time"] = change["new_value"]
+            elif change.get("type") == "url_redirect":
+                current_data.setdefault("sources", {})[change["source_key"]] = change["new_url"]
             else:
                 section = change["section"]
                 key = change["key"]
                 current_data["fees"][section]["items"][key]["amount"] = change["new_amount"]
-        current_data["last_updated"] = datetime.now().strftime("%Y-%m-%d")
+        if fee_changes or time_changes:
+            current_data["last_updated"] = datetime.now().strftime("%Y-%m-%d")
         current_data["last_checked"] = datetime.now().strftime("%Y-%m-%d")
         save_fees(current_data)
         if verbose:
             print("\nfees.json has been updated with new values.")
-    elif not changes:
-        # Just update the check timestamp
+    else:
+        # No real fee/time change to apply (missing_fee alerts carry no data
+        # to write) — just record that a check happened.
         current_data["last_checked"] = datetime.now().strftime("%Y-%m-%d")
         save_fees(current_data)
 
@@ -452,8 +591,16 @@ if __name__ == "__main__":
     quiet_flag = "--quiet" in sys.argv
 
     changes = check_fees(update=update_flag, verbose=not quiet_flag)
+    # url_redirect is auto-applied to fees.json["sources"], so it's commit-
+    # worthy just like a real fee change. missing_fee carries no data to
+    # write and is alert-only.
+    real_changes = [c for c in changes if c.get("type") != "missing_fee"]
+    missing_changes = [c for c in changes if c.get("type") == "missing_fee"]
 
-    # Exit code: 0 = no changes, 1 = changes detected, 2 = error
-    if changes:
+    # Exit code: 0 = no changes, 1 = real fee/time/URL change (commit-worthy),
+    # 2 = scraper missed an expected fee (needs manual attention)
+    if real_changes:
         sys.exit(1)
+    elif missing_changes:
+        sys.exit(2)
     sys.exit(0)
