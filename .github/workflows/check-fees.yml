@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
 
     steps:
       - name: Checkout repository
@@ -59,47 +60,36 @@ jobs:
           git commit -m "Auto-update: passport fees changed $(date +%Y-%m-%d)"
           git push
 
-      - name: Send email notification
+      - name: Open issue for fee update
         if: steps.scraper.outputs.changes_detected == 'true'
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: ${{ secrets.SMTP_HOST }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          username: ${{ secrets.SMTP_USER }}
-          password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "Passport Fees Updated - ${{ github.event.repository.name }}"
-          to: ${{ secrets.NOTIFY_EMAIL }}
-          from: ${{ secrets.SMTP_FROM }}
-          body: |
-            Passport fees and/or a source URL have been automatically updated.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCRAPER_OUTPUT: ${{ steps.scraper.outputs.scraper_output }}
+          PDF_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/Fee-Schedule.pdf
+        run: |
+          gh issue create \
+            --title "Passport fees updated - $(date +%Y-%m-%d)" \
+            --body "Passport fees and/or a source URL have been automatically updated.
 
-            ${{ steps.scraper.outputs.scraper_output }}
+          $SCRAPER_OUTPUT
 
-            Both websites will reflect the new fees automatically.
-            Updated PDF: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/Fee-Schedule.pdf
+          Both websites will reflect the new fees automatically.
+          Updated PDF: $PDF_URL"
 
-            This is an automated message from the passport fee checker.
-
-      - name: Send scraper-needs-attention alert
+      - name: Open issue for scraper needing attention
         if: steps.scraper.outputs.needs_attention == 'true'
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: ${{ secrets.SMTP_HOST }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          username: ${{ secrets.SMTP_USER }}
-          password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "ACTION NEEDED: Passport fee scraper needs attention - ${{ github.event.repository.name }}"
-          to: ${{ secrets.NOTIFY_EMAIL }}
-          from: ${{ secrets.SMTP_FROM }}
-          body: |
-            The scraper ran but could not find one or more expected fees on
-            the source site. This usually means the page's wording or layout
-            changed and a scraper pattern needs to be updated. Nothing was
-            changed automatically — fees.json is untouched.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCRAPER_OUTPUT: ${{ steps.scraper.outputs.scraper_output }}
+        run: |
+          gh issue create \
+            --title "ACTION NEEDED: Passport fee scraper needs attention - $(date +%Y-%m-%d)" \
+            --body "The scraper ran but could not find one or more expected fees on
+          the source site. This usually means the page's wording or layout
+          changed and a scraper pattern needs to be updated. Nothing was
+          changed automatically — fees.json is untouched.
 
-            ${{ steps.scraper.outputs.scraper_output }}
-
-            This is an automated message from the passport fee checker.
+          $SCRAPER_OUTPUT"
 
       - name: No changes summary
         if: steps.scraper.outputs.changes_detected == 'false' && steps.scraper.outputs.needs_attention == 'false'
