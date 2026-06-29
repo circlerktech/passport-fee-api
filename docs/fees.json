@@ -1,9 +1,11 @@
 {
-  "last_updated": "2026-04-27",
-  "last_checked": "2026-04-27",
+  "last_updated": "2026-06-29",
+  "last_checked": "2026-06-29",
   "sources": {
-    "state_department": "https://travel.state.gov/content/travel/en/passports/how-apply/fees.html",
-    "usps_prices": "https://www.usps.com/business/prices.htm"
+    "state_department": "https://travel.state.gov/en/passports/apply/help/fees.html",
+    "usps_prices": "https://www.usps.com/business/prices.htm",
+    "usps_express": "https://www.usps.com/ship/priority-mail-express.htm",
+    "usps_priority": "https://www.usps.com/ship/priority-mail.htm"
   },
   "fees": {
     "application": {
@@ -59,7 +61,7 @@
         },
         "return_delivery": {
           "label": "1-3 Day Delivery",
-          "amount": 22.05,
+          "amount": 23.36,
           "delivery_time": "1-3 Days",
           "source": "state_department"
         },
