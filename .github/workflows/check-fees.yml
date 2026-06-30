@@ -60,6 +60,18 @@ jobs:
           git commit -m "Auto-update: passport fees changed $(date +%Y-%m-%d)"
           git push
 
+      - name: Trigger WordPress PDF refresh
+        if: steps.scraper.outputs.changes_detected == 'true'
+        env:
+          WP_WEBHOOK_URL: ${{ secrets.WP_WEBHOOK_URL }}
+          WP_WEBHOOK_SECRET: ${{ secrets.WP_WEBHOOK_SECRET }}
+        run: |
+          curl -X POST "$WP_WEBHOOK_URL" \
+            -H "X-Fee-Schedule-Secret: $WP_WEBHOOK_SECRET" \
+            --fail --silent --show-error \
+            && echo "WordPress PDF refresh triggered successfully." \
+            || echo "WARNING: WordPress webhook call failed — plugin will fall back to daily cron."
+
       - name: Open issue for fee update
         if: steps.scraper.outputs.changes_detected == 'true'
         env:
